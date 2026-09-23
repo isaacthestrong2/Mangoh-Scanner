@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mangoh Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<style>
+:root{
+  --housing:#6b7684; --housing-deep:#4f5864; --label:#ffffff; --ink:#15181c;
+  --muted:#5d6570; --red:#d4202a; --ok:#2e7d4f; --bg:#e9ebe8; --line:#c9cdd1;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --housing:#8793a2; --housing-deep:#3a414b; --label:#f3f4f5; --ink:#eef0f2;
+    --muted:#a2aab4; --red:#ff4a52; --ok:#5fc58a; --bg:#1d2126; --line:#353b43;
+  }
+}
+:root[data-theme="dark"]{
+  --housing:#8793a2; --housing-deep:#3a414b; --label:#f3f4f5; --ink:#eef0f2;
+  --muted:#a2aab4; --red:#ff4a52; --ok:#5fc58a; --bg:#1d2126; --line:#353b43;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Barlow Semi Condensed",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:17px;line-height:1.4}
+main{max-width:560px;margin:0 auto;padding:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:4px 0 14px}
+h1{font-size:1.6rem;font-weight:700;margin:0;letter-spacing:.01em}
+.count{font-weight:600;color:var(--muted)}
+.count b{color:var(--ink);font-size:1.4rem}
+
+.scanner{background:var(--housing-deep);border-radius:14px;padding:10px;position:relative}
+#reader{border-radius:8px;overflow:hidden;background:#000;min-height:0}
+#reader video{width:100%!important;display:block}
+#reader img[alt="Info icon"], #reader img[alt="Camera based scan"]{display:none}
+.scan-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+button,.filebtn{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 16px;cursor:pointer;
+  background:var(--label);color:#15181c;min-height:48px;display:inline-flex;align-items:center;justify-content:center}
+button.primary{background:var(--red);color:#fff;flex:1}
+.filebtn{flex:1}
+.primary-file{background:var(--red);color:#fff}
+.filebtn input{display:none}
+button:focus-visible,.filebtn:focus-within,input:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+
+.flash{margin:12px 0 0;min-height:1.4em;font-weight:600}
+.flash.ok{color:var(--ok)} .flash.dup{color:var(--muted)} .flash.err{color:var(--red)}
+
+.manual{display:flex;gap:8px;margin-top:14px}
+.manual input{flex:1;font:inherit;font-size:1.1rem;padding:10px 12px;border-radius:10px;border:2px solid var(--line);
+  background:var(--label);color:#15181c;text-transform:lowercase;min-width:0}
+
+.list-head{display:flex;justify-content:space-between;align-items:center;margin:22px 0 8px}
+.list-head h2{font-size:1.15rem;margin:0}
+.list-head button.copy{background:var(--red);color:#fff;border-color:var(--red)}
+.list-head button{background:transparent;color:var(--ink);border:2px solid var(--line);min-height:40px;padding:6px 12px}
+
+ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+li{background:var(--label);color:#15181c;border-radius:8px;padding:10px 12px;border-left:6px solid var(--housing);
+  display:flex;justify-content:space-between;align-items:center;gap:6px}
+li.fresh{border-left-color:var(--red)}
+li .name{font-size:1.35rem;font-weight:700;letter-spacing:.02em}
+li .when{font-size:.8rem;color:#5d6570;display:block;font-weight:500}
+li button{background:transparent;color:#5d6570;min-height:36px;padding:4px 8px;font-size:1.2rem}
+.empty{color:var(--muted);padding:18px 0}
+.settings{margin-top:14px;color:var(--muted)}
+.settings summary{cursor:pointer;font-weight:600;padding:8px 0}
+.note{color:var(--muted);font-size:.9rem;margin-top:20px}
+@media (prefers-reduced-motion:no-preference){ li.fresh{animation:pop .5s ease-out} }
+@keyframes pop{from{transform:scale(.94);opacity:.4}to{transform:none;opacity:1}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mangoh scanner</h1>
+    <div class="count"><b id="count">0</b> Mangohs</div>
+  </header>
+
+  <section class="scanner">
+    <div id="reader"><video id="vid" playsinline muted style="display:none"></video></div>
+    <div class="scan-actions">
+      <button class="primary" id="camBtn">Start live scan</button>
+      <label class="filebtn">Photo<input type="file" accept="image/*" capture="environment" id="fileIn"></label>
+    </div>
+  </section>
+  <p class="flash" id="flash" role="status" aria-live="polite"></p>
+
+  <form class="manual" id="manual" onsubmit="return false">
+    <input id="manualIn" maxlength="4" placeholder="Type a name, e.g. dash" autocomplete="off" autocapitalize="off" aria-label="Mangoh name">
+    <button type="button" id="addBtn">Add</button>
+  </form>
+
+  <div class="list-head">
+    <h2>Scanned</h2>
+    <div style="display:flex;gap:8px"><button id="clearBtn">Clear</button><button id="copyBtn" class="copy">Copy list</button></div>
+  </div>
+  <ul id="list"></ul>
+  <p class="empty" id="empty">No Mangohs yet. Scan a label to add one.</p>
+  <p class="note" id="storeNote"></p>
+</main>
+
+
+<script>
+const $ = id => document.getElementById(id);
+let items = {};          // name -> {name, scannedAt}
+let db = null;
+let lastFresh = null;
+const LOCAL_KEY = "mangoh-scanner-v1";
+
+function clean(raw){
+  return String(raw||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
+}
+function flash(msg, kind){ const f=$("flash"); f.textContent=msg; f.className="flash "+kind; }
+
+function render(){
+  const list=$("list"); list.innerHTML="";
+  const arr=Object.values(items).sort((a,b)=>b.scannedAt-a.scannedAt);
+  $("count").textContent=arr.length;
+  $("empty").style.display=arr.length?"none":"block";
+  for(const it of arr){
+    const li=document.createElement("li");
+    if(it.name===lastFresh) li.className="fresh";
+    const left=document.createElement("div");
+    const n=document.createElement("span"); n.className="name"; n.textContent=it.name;
+    const w=document.createElement("span"); w.className="when";
+    w.textContent=new Date(it.scannedAt).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+    left.append(n,w);
+    const del=document.createElement("button"); del.textContent="✕"; del.setAttribute("aria-label","Remove "+it.name);
+    del.onclick=()=>removeItem(it.name);
+    li.append(left,del); list.append(li);
+  }
+}
+
+function saveLocal(){ if(db) return; try{ localStorage.setItem(LOCAL_KEY, JSON.stringify(items)); }catch(e){} }
+function loadLocal(){ try{ const s=localStorage.getItem(LOCAL_KEY); if(s) items=JSON.parse(s)||{}; }catch(e){ items={}; } }
+
+async function addName(raw){
+  const name=clean(raw);
+  if(name.length!==4){ flash(`"${String(raw).slice(0,20)}" isn't a 4-character name. Not added.`,"err"); return; }
+  if(items[name]){ flash(`${name} is already on the list.`,"dup"); return; }
+  const rec={name, scannedAt:Date.now()};
+  items[name]=rec; lastFresh=name; render();
+  flash(`Added ${name}.`,"ok");
+  if(navigator.vibrate) try{navigator.vibrate(60)}catch(e){}
+  beep();
+  if(db){ try{ await db.collection("mangohs").doc(name).set(rec); }catch(e){ flash(`Added ${name} here, but it didn't save: ${e.message||e.code}`,"err"); } }
+  else saveLocal();
+}
+async function removeItem(name){
+  delete items[name]; render(); flash(`Removed ${name}.`,"dup");
+  if(db){ try{ await db.collection("mangohs").doc(name).delete(); }catch(e){} } else saveLocal();
+}
+
+let actx=null;
+function beep(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+  const o=actx.createOscillator(),g=actx.createGain(); o.frequency.value=1400; g.gain.value=.08;
+  o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime+.09);}catch(e){} }
+// Scanning
+function tryDecoders(d,w,h){
+  if(typeof jsQR!=="undefined"){
+    const r=jsQR(d,w,h,{inversionAttempts:"attemptBoth"}); if(r&&r.data) return r.data;
+  }
+  if(typeof ZXing!=="undefined"){
+    try{
+      const lum=new Uint8ClampedArray(w*h);
+      for(let i=0;i<w*h;i++) lum[i]=(d[i*4]*0.299+d[i*4+1]*0.587+d[i*4+2]*0.114)|0;
+      const bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.RGBLuminanceSource(lum,w,h)));
+      const hints=new Map();
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.QR_CODE,ZXing.BarcodeFormat.DATA_MATRIX]);
+      hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+      return new ZXing.MultiFormatReader().decode(bmp,hints).getText();
+    }catch(e){}
+  }
+  return null;
+}
+function toCanvas(src,sx,sy,sw,sh){
+  const c=document.createElement("canvas"); c.width=sw; c.height=sh;
+  c.getContext("2d").drawImage(src,sx,sy,sw,sh,0,0,sw,sh); return c;
+}
+// Downscale by halving steps (much sharper than one big jump), then to exact size.
+function scaled(srcCanvas,target){
+  let c=srcCanvas;
+  while(Math.max(c.width,c.height)/2>=target){
+    const n=document.createElement("canvas"); n.width=Math.round(c.width/2); n.height=Math.round(c.height/2);
+    n.getContext("2d").drawImage(c,0,0,n.width,n.height); c=n;
+  }
+  const s=Math.min(1,target/Math.max(c.width,c.height));
+  const out=document.createElement("canvas"); out.width=Math.round(c.width*s); out.height=Math.round(c.height*s);
+  const ctx=out.getContext("2d",{willReadFrequently:true});
+  ctx.imageSmoothingQuality="high"; ctx.drawImage(c,0,0,out.width,out.height);
+  return out;
+}
+function decodeCanvas(c){
+  const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height);
+  return tryDecoders(d.data,c.width,c.height);
+}
+async function decodeWithNative(src){
+  if(!("BarcodeDetector" in window)) return null;
+  try{ const bd=new BarcodeDetector({formats:["qr_code","data_matrix"]});
+    const res=await bd.detect(src); return res.length?res[0].rawValue:null; }catch(e){ return null; }
+}
+const yieldUI=()=>new Promise(r=>setTimeout(r,0));
+async function decodeImage(bmp){
+  let t=await decodeWithNative(bmp); if(t) return t;
+  const W=bmp.width,H=bmp.height;
+  const full=toCanvas(bmp,0,0,W,H);
+  // whole photo, then center crops (code may be small in frame)
+  const regions=[[0,0,W,H],[W*.2,H*.2,W*.6,H*.6],[W*.3,H*.3,W*.4,H*.4],[0,H*.2,W,H*.6]];
+  for(const [x,y,w,h] of regions){
+    const base= (w===W&&h===H)?full:toCanvas(full,Math.round(x),Math.round(y),Math.round(w),Math.round(h));
+    for(const target of [1000,1200,800,1400,600,1800]){
+      t=decodeCanvas(scaled(base,target)); if(t) return t;
+      await yieldUI();
+    }
+  }
+  return null;
+}
+$("fileIn").onchange=async(ev)=>{
+  const f=ev.target.files[0]; if(!f) return;
+  if(typeof jsQR==="undefined" && typeof ZXing==="undefined"){ flash("The code reader didn't load. Check your connection and reload.","err"); ev.target.value=""; return; }
+  flash("Reading label…","dup");
+  try{
+    const bmp=await createImageBitmap(f);
+    const text=await decodeImage(bmp);
+    if(text) addName(text); else flash("No code found in that photo. Try again a little closer, holding steady.","err");
+  }catch(e){ flash("Couldn't open that image: "+(e.message||e),"err"); }
+  finally{ ev.target.value=""; }
+};
+
+let stream=null, raf=null, cooldown={};
+function stopLive(){ if(stream){stream.getTracks().forEach(t=>t.stop()); stream=null;} clearTimeout(raf);
+  $("vid").style.display="none"; $("camBtn").textContent="Start live scan"; }
+$("camBtn").onclick=async()=>{
+  if(stream){ stopLive(); return; }
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280}}});
+  }catch(e){
+    stream=null; flash("Camera permission denied. Allow camera for this site in Settings, then reload.","err"); return;
+  }
+  const v=$("vid"); v.srcObject=stream; v.style.display="block"; await v.play();
+  $("camBtn").textContent="Stop scanning"; flash("Point the camera at a label. It adds automatically.","dup");
+  let busy=false;
+  const tick=async()=>{
+    if(!stream) return;
+    if(!busy && v.videoWidth){
+      busy=true;
+      let text=await decodeWithNative(v);
+      if(!text) text=decodeCanvas(scaled(toCanvas(v,0,0,v.videoWidth,v.videoHeight),900));
+      if(text){ const now=Date.now(); if(!cooldown[text]||now-cooldown[text]>2500){ cooldown[text]=now; addName(text);} }
+      busy=false;
+    }
+    raf=setTimeout(()=>requestAnimationFrame(tick),120);
+  };
+  tick();
+};
+$("addBtn").onclick=()=>{ addName($("manualIn").value); $("manualIn").value=""; $("manualIn").focus(); };
+$("manualIn").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("addBtn").click(); } });
+
+$("clearBtn").onclick=()=>{
+  const n=Object.keys(items).length; if(!n) return;
+  if(!confirm(`Clear all ${n} Mangohs from the list?`)) return;
+  items={}; lastFresh=null; saveLocal(); render(); flash("List cleared.","dup");
+};
+// Copy names, one per line, in scan order: paste into A2 and it fills down
+$("copyBtn").onclick=async()=>{
+  const arr=Object.values(items).sort((a,b)=>a.scannedAt-b.scannedAt);
+  if(!arr.length){ flash("Nothing to copy yet.","dup"); return; }
+  const text=arr.map(i=>i.name).join("\n");
+  try{ await navigator.clipboard.writeText(text); flash(`Copied ${arr.length} Mangohs. Paste into A2 in your sheet.`,"ok"); }
+  catch(e){
+    const t=document.createElement("textarea"); t.value=text; document.body.append(t); t.select();
+    const ok=document.execCommand("copy"); t.remove();
+    flash(ok?`Copied ${arr.length} Mangohs. Paste into A2 in your sheet.`:"Couldn't copy here.", ok?"ok":"err");
+  }
+};
+// Boot
+loadLocal(); render();
+$("storeNote").textContent="Saved on this phone until you clear it.";
+
+</script>
+</body>
+</html>
